@@ -7,12 +7,14 @@ use anyhow::Result;
 /// Group metadata including name and participants
 #[derive(Debug, Clone)]
 pub struct GroupMetadata {
+    #[allow(dead_code)]
     pub jid: Jid,
     pub subject: String,
     pub participant_count: usize,
 }
 
 /// Extension trait to add group management functionality to the WhatsApp Client
+#[allow(async_fn_in_trait)]
 pub trait GroupManagement {
     /// Query group metadata including name (subject) and participant count
     /// 
@@ -64,11 +66,22 @@ pub trait GroupManagement {
     /// 
     /// # Returns
     /// Result containing a vector of tuples with (participant_jid, success: bool, error_code: Option<u64>)
+    #[allow(dead_code)]
     async fn remove_group_participants(
         &self,
         group_jid: &Jid,
         participant_jids: &[Jid],
     ) -> Result<Vec<(Jid, bool, Option<u64>)>>;
+
+    /// Get the invite link for a WhatsApp group
+    /// 
+    /// # Arguments
+    /// * `group_jid` - The JID of the group (format: "1234567890-1234567890@g.us")
+    /// 
+    /// # Returns
+    /// Result containing the invite link (format: "https://chat.whatsapp.com/XXXXXX")
+    #[allow(dead_code)]
+    async fn get_group_invite_link(&self, group_jid: &Jid) -> Result<String>;
 }
 
 impl GroupManagement for Client {
@@ -223,5 +236,33 @@ impl GroupManagement for Client {
         }
 
         Ok(results)
+    }
+
+    async fn get_group_invite_link(&self, group_jid: &Jid) -> Result<String> {
+        let invite_node = NodeBuilder::new("invite")
+            .build();
+
+        let iq = whatsapp_rust::request::InfoQuery {
+            namespace: "w:g2",
+            query_type: whatsapp_rust::request::InfoQueryType::Get,
+            to: group_jid.clone(),
+            content: Some(NodeContent::Nodes(vec![invite_node])),
+            id: None,
+            target: None,
+            timeout: None,
+        };
+
+        let resp_node = self.send_iq(iq).await?;
+
+        let invite_response = resp_node
+            .get_optional_child("invite")
+            .ok_or_else(|| anyhow::anyhow!("<invite> not found in response"))?;
+
+        let mut parser = wacore_binary::attrs::AttrParser::new(invite_response);
+        let invite_code = parser
+            .optional_string("code")
+            .ok_or_else(|| anyhow::anyhow!("Invite code not found"))?;
+
+        Ok(format!("https://chat.whatsapp.com/{}", invite_code))
     }
 }
