@@ -1,19 +1,19 @@
 mod groups;
 
-use whatsapp_rust::bot::Bot;
-use whatsapp_rust::store::SqliteStore;
+use groups::GroupManagement;
+use lazy_static::lazy_static;
+use qrcode::QrCode;
+use qrcode::render::unicode;
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 use wacore::types::events::Event;
 use wacore_binary::jid::Jid;
 use waproto::whatsapp as wa;
-use std::sync::Arc;
-use std::fs;
-use std::path::Path;
-use lazy_static::lazy_static;
+use whatsapp_rust::bot::Bot;
+use whatsapp_rust::store::SqliteStore;
 use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
 use whatsapp_rust_ureq_http_client::UreqHttpClient;
-use qrcode::QrCode;
-use qrcode::render::unicode;
-use groups::GroupManagement;
 
 lazy_static! {
     static ref INVITE_LINK: String = {
@@ -36,7 +36,7 @@ fn extract_group_jid(input: &str) -> Option<String> {
     if input.contains("@g.us") {
         return Some(input.to_string());
     }
-    
+
     // Try to extract from invite link
     // Format: https://chat.whatsapp.com/INVITE_CODE
     if input.contains("chat.whatsapp.com/") {
@@ -49,7 +49,11 @@ fn extract_group_jid(input: &str) -> Option<String> {
 }
 
 /// Send invite links to participants as fallback
-async fn send_invite_links(client: &whatsapp_rust::Client, invite_link: &str, participant_jids: &[Jid]) {
+async fn send_invite_links(
+    client: &whatsapp_rust::Client,
+    invite_link: &str,
+    participant_jids: &[Jid],
+) {
     for jid in participant_jids {
         let message = wa::Message {
             conversation: Some(format!("Join our group: {}", invite_link)),
@@ -148,16 +152,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                 for (index, jid) in participant_jids.iter().enumerate() {
                                     println!("=== Adding member {}/{} ===", index + 1, participant_jids.len());
-                                    
+
                                     let mut retry_count = 0;
                                     let max_retries = 2;
                                     let mut added = false;
-                                    
+
                                     while retry_count <= max_retries && !added {
                                         if retry_count > 0 {
                                             println!("   Retry attempt {}/{}", retry_count, max_retries);
                                         }
-                                        
+
                                         match client.add_group_participants(&group_jid, &[jid.clone()]).await {
                                             Ok(results) => {
                                                 for (jid, success, error_code) in results {
@@ -175,18 +179,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                                 continue;
                                                             }
                                                         }
-                                                        
+
                                                         println!("✗ Failed to add: {} (error: {:?})", jid, error_code);
-                                                        
+
                                                         // Track invalid phones (400 errors)
                                                         if let Some(400) = error_code {
                                                             let phone = jid.to_string().replace("@s.whatsapp.net", "").replace("@lid", "");
                                                             invalid_phones.push(phone);
                                                         }
-                                                        
+
                                                         failed_jids.push(jid);
                                                         added = true;
-                                                        
+
                                                         // Explain common errors
                                                         if let Some(code) = error_code {
                                                             match code {
@@ -212,7 +216,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         continue;
                                                     }
                                                 }
-                                                
+
                                                 // Track invalid phones (400 errors)
                                                 if error_msg.contains("400") || error_msg.contains("bad-request") {
                                                     let phone = jid.to_string().replace("@s.whatsapp.net", "").replace("@lid", "");
@@ -221,12 +225,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 } else {
                                                     eprintln!("✗ Failed to add {}: {}", jid, e);
                                                 }
-                                                
+
                                                 failed_jids.push(jid.clone());
                                                 added = true;
                                             }
                                         }
-                                        
+
                                         if !added {
                                             retry_count += 1;
                                         }
@@ -246,10 +250,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Save invalid phones to JSON file
                                 if !invalid_phones.is_empty() {
                                     use std::path::Path;
-                                    
+
                                     let file_path = "invalid_phones.json";
                                     let mut all_invalid_phones: Vec<String> = Vec::new();
-                                    
+
                                     // Load existing invalid phones if file exists
                                     if Path::new(file_path).exists() {
                                         if let Ok(existing_data) = fs::read_to_string(file_path) {
@@ -258,14 +262,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                     }
-                                    
+
                                     // Add new invalid phones (avoid duplicates)
                                     for phone in invalid_phones {
                                         if !all_invalid_phones.contains(&phone) {
                                             all_invalid_phones.push(phone);
                                         }
                                     }
-                                    
+
                                     // Save to file
                                     if let Ok(json_data) = serde_json::to_string_pretty(&all_invalid_phones) {
                                         if let Err(e) = fs::write(file_path, json_data) {

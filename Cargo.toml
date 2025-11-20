@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-whatsapp-rust = { path = "/tmp/whatsapp-rust" }
-wacore = { path = "/tmp/whatsapp-rust/wacore" }
-wacore-binary = { path = "/tmp/whatsapp-rust/wacore/binary" }
-waproto = { path = "/tmp/whatsapp-rust/waproto" }
+whatsapp-rust = { git = "https://github.com/jlucaso1/whatsapp-rust" }
+wacore = { git = "https://github.com/jlucaso1/whatsapp-rust" }
+wacore-binary = { git = "https://github.com/jlucaso1/whatsapp-rust" }
+waproto = { git = "https://github.com/jlucaso1/whatsapp-rust" }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1.0"
 lazy_static = "1.4"
-whatsapp-rust-tokio-transport = { path = "/tmp/whatsapp-rust/transports/tokio-transport" }
-whatsapp-rust-ureq-http-client = { path = "/tmp/whatsapp-rust/http_clients/ureq-client" }
+whatsapp-rust-tokio-transport = { git = "https://github.com/jlucaso1/whatsapp-rust" }
+whatsapp-rust-ureq-http-client = { git = "https://github.com/jlucaso1/whatsapp-rust" }
 qrcode = "0.14"
 anyhow = "1.0"
 log = "0.4"

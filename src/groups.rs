@@ -1,8 +1,8 @@
-use whatsapp_rust::Client;
+use anyhow::Result;
 use wacore_binary::builder::NodeBuilder;
 use wacore_binary::jid::Jid;
 use wacore_binary::node::NodeContent;
-use anyhow::Result;
+use whatsapp_rust::Client;
 
 /// Group metadata including name and participants
 #[derive(Debug, Clone)]
@@ -17,32 +17,32 @@ pub struct GroupMetadata {
 #[allow(async_fn_in_trait)]
 pub trait GroupManagement {
     /// Query group metadata including name (subject) and participant count
-    /// 
+    ///
     /// # Arguments
     /// * `group_jid` - The JID of the group (format: "1234567890-1234567890@g.us")
-    /// 
+    ///
     /// # Returns
     /// Result containing GroupMetadata with the group name and participant count
     async fn query_group_metadata(&self, group_jid: &Jid) -> Result<GroupMetadata>;
     /// Add participants to a WhatsApp group
-    /// 
+    ///
     /// # Arguments
     /// * `group_jid` - The JID of the group (format: "1234567890-1234567890@g.us")
     /// * `participant_jids` - List of participant JIDs to add (format: "1234567890@s.whatsapp.net")
-    /// 
+    ///
     /// # Returns
     /// Result containing a vector of tuples with (participant_jid, success: bool, error_code: Option<u64>)
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// use wacore_binary::jid::Jid;
-    /// 
+    ///
     /// let group_jid: Jid = "1234567890-1234567890@g.us".parse()?;
     /// let participants = vec![
     ///     "1234567890@s.whatsapp.net".parse()?,
     ///     "0987654321@s.whatsapp.net".parse()?,
     /// ];
-    /// 
+    ///
     /// let results = client.add_group_participants(&group_jid, &participants).await?;
     /// for (jid, success, error_code) in results {
     ///     if success {
@@ -59,11 +59,11 @@ pub trait GroupManagement {
     ) -> Result<Vec<(Jid, bool, Option<u64>)>>;
 
     /// Remove participants from a WhatsApp group
-    /// 
+    ///
     /// # Arguments
     /// * `group_jid` - The JID of the group (format: "1234567890-1234567890@g.us")
     /// * `participant_jids` - List of participant JIDs to remove (format: "1234567890@s.whatsapp.net")
-    /// 
+    ///
     /// # Returns
     /// Result containing a vector of tuples with (participant_jid, success: bool, error_code: Option<u64>)
     #[allow(dead_code)]
@@ -74,10 +74,10 @@ pub trait GroupManagement {
     ) -> Result<Vec<(Jid, bool, Option<u64>)>>;
 
     /// Get the invite link for a WhatsApp group
-    /// 
+    ///
     /// # Arguments
     /// * `group_jid` - The JID of the group (format: "1234567890-1234567890@g.us")
-    /// 
+    ///
     /// # Returns
     /// Result containing the invite link (format: "https://chat.whatsapp.com/XXXXXX")
     #[allow(dead_code)]
@@ -107,8 +107,11 @@ impl GroupManagement for Client {
             .ok_or_else(|| anyhow::anyhow!("<group> not found in group info response"))?;
 
         let mut parser = wacore_binary::attrs::AttrParser::new(group_node);
-        let subject = parser.optional_string("subject").unwrap_or("Unknown Group").to_string();
-        
+        let subject = parser
+            .optional_string("subject")
+            .unwrap_or("Unknown Group")
+            .to_string();
+
         let participant_count = group_node.get_children_by_tag("participant").len();
 
         Ok(GroupMetadata {
@@ -138,9 +141,7 @@ impl GroupManagement for Client {
             .collect();
 
         // Build add node with participants
-        let add_node = NodeBuilder::new("add")
-            .children(participant_nodes)
-            .build();
+        let add_node = NodeBuilder::new("add").children(participant_nodes).build();
 
         // Build the IQ query
         let iq = whatsapp_rust::request::InfoQuery {
@@ -155,16 +156,16 @@ impl GroupManagement for Client {
 
         // Send the IQ and get response
         let resp_node = self.send_iq(iq).await?;
-        
+
         // Parse the response to check for errors or success
         let mut results = Vec::new();
-        
+
         if let Some(add_response) = resp_node.get_optional_child("add") {
             for participant_node in add_response.get_children_by_tag("participant") {
                 let mut parser = wacore_binary::attrs::AttrParser::new(participant_node);
                 let jid = parser.jid("jid");
                 let error_code = parser.optional_u64("error");
-                
+
                 if let Some(code) = error_code {
                     log::warn!("Failed to add participant {}: error code {}", jid, code);
                     results.push((jid, false, Some(code)));
@@ -215,16 +216,16 @@ impl GroupManagement for Client {
 
         // Send the IQ and get response
         let resp_node = self.send_iq(iq).await?;
-        
+
         // Parse the response to check for errors or success
         let mut results = Vec::new();
-        
+
         if let Some(remove_response) = resp_node.get_optional_child("remove") {
             for participant_node in remove_response.get_children_by_tag("participant") {
                 let mut parser = wacore_binary::attrs::AttrParser::new(participant_node);
                 let jid = parser.jid("jid");
                 let error_code = parser.optional_u64("error");
-                
+
                 if let Some(code) = error_code {
                     log::warn!("Failed to remove participant {}: error code {}", jid, code);
                     results.push((jid, false, Some(code)));
@@ -239,8 +240,7 @@ impl GroupManagement for Client {
     }
 
     async fn get_group_invite_link(&self, group_jid: &Jid) -> Result<String> {
-        let invite_node = NodeBuilder::new("invite")
-            .build();
+        let invite_node = NodeBuilder::new("invite").build();
 
         let iq = whatsapp_rust::request::InfoQuery {
             namespace: "w:g2",

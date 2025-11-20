@@ -1,9 +1,9 @@
-use wacore_binary::jid::Jid;
-use whatsapp_rust::Client;
+use crate::groups::GroupManagement;
 use std::fs;
 use std::path::Path;
+use wacore_binary::jid::Jid;
 use waproto::whatsapp as wa;
-use crate::groups::GroupManagement;
+use whatsapp_rust::Client;
 
 #[derive(Debug)]
 pub struct AddMemberResult {
@@ -44,7 +44,10 @@ pub async fn add_member_with_retry(
             println!("   Retry attempt {}/{}", retry_count, max_retries);
         }
 
-        match client.add_group_participants(group_jid, &[member_jid.clone()]).await {
+        match client
+            .add_group_participants(group_jid, &[member_jid.clone()])
+            .await
+        {
             Ok(results) => {
                 for (jid, success, error_code) in results {
                     if success {
@@ -54,7 +57,9 @@ pub async fn add_member_with_retry(
                     } else {
                         if let Some(429) = error_code {
                             if retry_count < max_retries {
-                                println!("⚠️  Rate limited (429), waiting 30 seconds before retry...");
+                                println!(
+                                    "⚠️  Rate limited (429), waiting 30 seconds before retry..."
+                                );
                                 tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                                 retry_count += 1;
                                 continue;
@@ -73,10 +78,16 @@ pub async fn add_member_with_retry(
                             }
 
                             match code {
-                                400 => println!("   → Bad request (invalid phone number - will be saved to invalid_phones.json)"),
-                                403 => println!("   → Not authorized (you may not be an admin - will send invite message)"),
+                                400 => println!(
+                                    "   → Bad request (invalid phone number - will be saved to invalid_phones.json)"
+                                ),
+                                403 => println!(
+                                    "   → Not authorized (you may not be an admin - will send invite message)"
+                                ),
                                 409 => println!("   → User is already in the group"),
-                                404 => println!("   → User not found or doesn't have WhatsApp (will send invite message)"),
+                                404 => println!(
+                                    "   → User not found or doesn't have WhatsApp (will send invite message)"
+                                ),
                                 429 => println!("   → Rate limit exceeded (max retries reached)"),
                                 _ => println!("   → Unknown error code"),
                             }
@@ -99,11 +110,15 @@ pub async fn add_member_with_retry(
                     }
                 }
 
-                result.should_track_invalid = error_msg.contains("400") || error_msg.contains("bad-request");
+                result.should_track_invalid =
+                    error_msg.contains("400") || error_msg.contains("bad-request");
                 result.should_send_invite = error_msg.contains("403") || error_msg.contains("404");
 
                 if result.should_track_invalid {
-                    eprintln!("✗ Failed to add {}: {} (saved to invalid_phones.json)", member_jid, e);
+                    eprintln!(
+                        "✗ Failed to add {}: {} (saved to invalid_phones.json)",
+                        member_jid, e
+                    );
                 } else {
                     eprintln!("✗ Failed to add {}: {}", member_jid, e);
                 }
@@ -151,8 +166,7 @@ pub fn save_invalid_phones(invalid_phones: &[String]) -> Result<usize, String> {
     let json_data = serde_json::to_string_pretty(&all_invalid_phones)
         .map_err(|e| format!("Failed to serialize: {}", e))?;
 
-    fs::write(file_path, json_data)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(file_path, json_data).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(all_invalid_phones.len())
 }
@@ -173,12 +187,11 @@ fn load_invites_sent() -> Vec<String> {
 /// Save list of phones that received invite messages
 fn save_invites_sent(phones: &[String]) -> Result<(), String> {
     let file_path = "invites_sent.json";
-    let json_data = serde_json::to_string_pretty(phones)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    
-    fs::write(file_path, json_data)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
-    
+    let json_data =
+        serde_json::to_string_pretty(phones).map_err(|e| format!("Failed to serialize: {}", e))?;
+
+    fs::write(file_path, json_data).map_err(|e| format!("Failed to write file: {}", e))?;
+
     Ok(())
 }
 
@@ -186,36 +199,33 @@ fn save_invites_sent(phones: &[String]) -> Result<(), String> {
 /// Returns default template if file doesn't exist
 fn load_invite_message_template() -> String {
     let file_path = "message.txt";
-    
+
     if Path::new(file_path).exists() {
         if let Ok(template) = fs::read_to_string(file_path) {
             return template.trim().to_string();
         }
     }
-    
+
     // Default template if file doesn't exist
     "Hi! You've been invited to join our WhatsApp group.\n\n\
      Join here: {link}\n\n\
-     If the link doesn't work, please contact an admin.".to_string()
+     If the link doesn't work, please contact an admin."
+        .to_string()
 }
 
 /// Send invite messages to members who couldn't be added
-pub async fn send_invite_messages(
-    client: &Client,
-    group_jid: &Jid,
-    failed_jids: &[Jid],
-) -> usize {
+pub async fn send_invite_messages(client: &Client, group_jid: &Jid, failed_jids: &[Jid]) -> usize {
     if failed_jids.is_empty() {
         return 0;
     }
 
     // Load list of phones that already received invites
     let mut invites_sent = load_invites_sent();
-    
+
     // Filter out JIDs that already received invite messages
     let mut pending_jids = Vec::new();
     let mut skipped_count = 0;
-    
+
     for jid in failed_jids {
         let phone = jid_to_phone(jid);
         if invites_sent.contains(&phone) {
@@ -225,19 +235,29 @@ pub async fn send_invite_messages(
             pending_jids.push(jid.clone());
         }
     }
-    
+
     if pending_jids.is_empty() {
         if skipped_count > 0 {
-            println!("\n✓ All {} member(s) already received invite messages", skipped_count);
+            println!(
+                "\n✓ All {} member(s) already received invite messages",
+                skipped_count
+            );
         }
         return 0;
     }
 
     println!("\n=== Sending Invite Messages ===");
     if skipped_count > 0 {
-        println!("Sending invite messages to {} new members ({} already sent)\n", pending_jids.len(), skipped_count);
+        println!(
+            "Sending invite messages to {} new members ({} already sent)\n",
+            pending_jids.len(),
+            skipped_count
+        );
     } else {
-        println!("Sending invite messages to {} members who couldn't be added directly\n", pending_jids.len());
+        println!(
+            "Sending invite messages to {} members who couldn't be added directly\n",
+            pending_jids.len()
+        );
     }
 
     // Try to get the group invite link
@@ -264,13 +284,13 @@ pub async fn send_invite_messages(
         match client.send_message(jid.clone(), message).await {
             Ok(_) => {
                 println!("📧 Sent invite message to {}", jid);
-                
+
                 // Track that invite was sent
                 let phone = jid_to_phone(jid);
                 if !invites_sent.contains(&phone) {
                     invites_sent.push(phone);
                 }
-                
+
                 sent_count += 1;
             }
             Err(e) => eprintln!("⚠️  Failed to send message to {}: {}", jid, e),
@@ -278,7 +298,7 @@ pub async fn send_invite_messages(
 
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
-    
+
     // Save updated list of invites sent
     if sent_count > 0 {
         if let Err(e) = save_invites_sent(&invites_sent) {
@@ -298,7 +318,11 @@ pub async fn add_members_batch(
 ) -> AddMemberStats {
     let mut stats = AddMemberStats::default();
 
-    println!("Adding {} members one by one ({}s delay between each)...\n", member_jids.len(), delay_seconds);
+    println!(
+        "Adding {} members one by one ({}s delay between each)...\n",
+        member_jids.len(),
+        delay_seconds
+    );
 
     for (index, jid) in member_jids.iter().enumerate() {
         println!("=== Adding member {}/{} ===", index + 1, member_jids.len());
@@ -331,16 +355,15 @@ pub async fn add_members_batch(
     stats
 }
 
-pub async fn finalize_member_addition(
-    client: &Client,
-    group_jid: &Jid,
-    stats: AddMemberStats,
-) {
+pub async fn finalize_member_addition(client: &Client, group_jid: &Jid, stats: AddMemberStats) {
     println!("\n=== Final Summary ===");
     println!("✓ Successfully added: {}", stats.total_success);
     println!("⊘ Skipped: {}", stats.total_skipped);
     println!("✗ Failed: {}", stats.total_failed);
-    println!("Total processed: {}", stats.total_success + stats.total_skipped + stats.total_failed);
+    println!(
+        "Total processed: {}",
+        stats.total_success + stats.total_skipped + stats.total_failed
+    );
 
     if !stats.failed_for_invite.is_empty() {
         send_invite_messages(client, group_jid, &stats.failed_for_invite).await;
@@ -348,7 +371,10 @@ pub async fn finalize_member_addition(
 
     if !stats.invalid_phones.is_empty() {
         match save_invalid_phones(&stats.invalid_phones) {
-            Ok(total) => println!("\n📝 Saved {} invalid phone numbers to invalid_phones.json", total),
+            Ok(total) => println!(
+                "\n📝 Saved {} invalid phone numbers to invalid_phones.json",
+                total
+            ),
             Err(e) => eprintln!("⚠️  Failed to save invalid_phones.json: {}", e),
         }
     }

@@ -1,15 +1,14 @@
-/// Find group JIDs and names by listening to messages
-/// See README.md for usage instructions
-
-use whatsapp_rust::bot::Bot;
-use whatsapp_rust::store::SqliteStore;
-use wacore::types::events::Event;
-use std::sync::Arc;
-use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
-use whatsapp_rust_ureq_http_client::UreqHttpClient;
 use qrcode::QrCode;
 use qrcode::render::unicode;
+use std::sync::Arc;
+use wacore::types::events::Event;
 use whatsapp_invites::groups::GroupManagement;
+/// Find group JIDs and names by listening to messages
+/// See README.md for usage instructions
+use whatsapp_rust::bot::Bot;
+use whatsapp_rust::store::SqliteStore;
+use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
+use whatsapp_rust_ureq_http_client::UreqHttpClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,19 +36,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 Event::PairingQrCode { code, timeout } => {
                     let qr = QrCode::new(code.as_bytes()).unwrap();
-                    let image = qr.render::<unicode::Dense1x2>()
+                    let image = qr
+                        .render::<unicode::Dense1x2>()
                         .dark_color(unicode::Dense1x2::Dark)
                         .light_color(unicode::Dense1x2::Light)
                         .build();
-                    println!("Scan this QR code (valid for {}s):\n{}\n", timeout.as_secs(), image);
+                    println!(
+                        "Scan this QR code (valid for {}s):\n{}\n",
+                        timeout.as_secs(),
+                        image
+                    );
                 }
                 Event::Connected(_) => {
                     println!("✅ Connected! Listening for group messages...\n");
-                    println!("💡 Send a message to any group now, or wait for incoming messages.\n");
+                    println!(
+                        "💡 Send a message to any group now, or wait for incoming messages.\n"
+                    );
                 }
                 Event::Message(_msg, info) => {
                     let from = &info.source.chat;
-                    
+
                     // we check if it's a group message (they end with @g.us)
                     if from.to_string().ends_with("@g.us") {
                         let sender = info.source.sender.to_string();
@@ -60,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 None
                             }
                         };
-                        
+
                         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                         println!("📱 GROUP MESSAGE RECEIVED!");
                         if let Some(info) = group_info {
