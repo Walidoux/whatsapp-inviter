@@ -1,9 +1,5 @@
-/// Get Group JID by querying a group you're already in
-/// 
-/// Usage: 
-///   First, send a message to the group you want to add members to
-///   Then run: cargo +nightly run --example get_group_jid
-///   The bot will listen for messages and display group JIDs
+/// Find group JIDs and names by listening to messages
+/// See README.md for usage instructions
 
 use whatsapp_rust::bot::Bot;
 use whatsapp_rust::store::SqliteStore;
@@ -13,8 +9,6 @@ use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
 use whatsapp_rust_ureq_http_client::UreqHttpClient;
 use qrcode::QrCode;
 use qrcode::render::unicode;
-
-// Import our group management trait
 use whatsapp_invites::groups::GroupManagement;
 
 #[tokio::main]
@@ -56,11 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::Message(_msg, info) => {
                     let from = &info.source.chat;
                     
-                    // Check if it's a group message (groups end with @g.us)
+                    // we check if it's a group message (they end with @g.us)
                     if from.to_string().ends_with("@g.us") {
                         let sender = info.source.sender.to_string();
-                        
-                        // Query group metadata to get the name
                         let group_info = match _client.query_group_metadata(from).await {
                             Ok(info) => Some(info),
                             Err(e) => {
@@ -81,7 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("✅ To add members to this group, run:");
                         println!("   cargo +nightly run {}\n", from);
                     } else {
-                        // It's a direct message, not a group
                         println!("💬 Direct message from: {} (not a group)", from);
                     }
                 }

@@ -144,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                 let mut success_count = 0;
                                 let mut failed_jids = Vec::new();
+                                let mut invalid_phones = Vec::new();
 
                                 for (index, jid) in participant_jids.iter().enumerate() {
                                     println!("=== Adding member {}/{} ===", index + 1, participant_jids.len());
@@ -176,12 +177,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         }
                                                         
                                                         println!("✗ Failed to add: {} (error: {:?})", jid, error_code);
+                                                        
+                                                        // Track invalid phones (400 errors)
+                                                        if let Some(400) = error_code {
+                                                            let phone = jid.to_string().replace("@s.whatsapp.net", "").replace("@lid", "");
+                                                            invalid_phones.push(phone);
+                                                        }
+                                                        
                                                         failed_jids.push(jid);
                                                         added = true;
                                                         
                                                         // Explain common errors
                                                         if let Some(code) = error_code {
                                                             match code {
+                                                                400 => println!("   → Bad request (invalid phone number - will be saved to invalid_phones.json)"),
                                                                 403 => println!("   → Not authorized (you may not be an admin)"),
                                                                 409 => println!("   → User is already in the group"),
                                                                 404 => println!("   → User not found or doesn't have WhatsApp"),
@@ -204,7 +213,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     }
                                                 }
                                                 
-                                                eprintln!("✗ Failed to add {}: {}", jid, e);
+                                                // Track invalid phones (400 errors)
+                                                if error_msg.contains("400") || error_msg.contains("bad-request") {
+                                                    let phone = jid.to_string().replace("@s.whatsapp.net", "").replace("@lid", "");
+                                                    invalid_phones.push(phone.clone());
+                                                    eprintln!("✗ Failed to add {}: {} (saved to invalid_phones.json)", jid, e);
+                                                } else {
+                                                    eprintln!("✗ Failed to add {}: {}", jid, e);
+                                                }
+                                                
                                                 failed_jids.push(jid.clone());
                                                 added = true;
                                             }
@@ -225,6 +242,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("\n=== Summary ===");
                                 println!("✓ Successfully added: {}", success_count);
                                 println!("✗ Failed: {}", failed_jids.len());
+
+                                // Save invalid phones to JSON file
+                                if !invalid_phones.is_empty() {
+                                    use std::path::Path;
+                                    
+                                    let file_path = "invalid_phones.json";
+                                    let mut all_invalid_phones: Vec<String> = Vec::new();
+                                    
+                                    // Load existing invalid phones if file exists
+                                    if Path::new(file_path).exists() {
+                                        if let Ok(existing_data) = fs::read_to_string(file_path) {
+                                            if let Ok(existing_phones) = serde_json::from_str::<Vec<String>>(&existing_data) {
+                                                all_invalid_phones = existing_phones;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Add new invalid phones (avoid duplicates)
+                                    for phone in invalid_phones {
+                                        if !all_invalid_phones.contains(&phone) {
+                                            all_invalid_phones.push(phone);
+                                        }
+                                    }
+                                    
+                                    // Save to file
+                                    if let Ok(json_data) = serde_json::to_string_pretty(&all_invalid_phones) {
+                                        if let Err(e) = fs::write(file_path, json_data) {
+                                            eprintln!("⚠️  Failed to save invalid_phones.json: {}", e);
+                                        } else {
+                                            println!("\n📝 Saved {} invalid phone numbers to invalid_phones.json", all_invalid_phones.len());
+                                        }
+                                    }
+                                }
 
                                 // Fallback: send invite links to failed additions
                                 if !failed_jids.is_empty() {

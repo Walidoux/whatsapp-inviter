@@ -1,7 +1,5 @@
-/// Example: Add members directly to a WhatsApp group
-/// 
-/// Usage: cargo run --example add_members <group_jid> <phones_json_file>
-/// Example: cargo run --example add_members "1234567890-1234567890@g.us" phones.json
+/// Add members to a WhatsApp group from a JSON file
+/// See README.md for usage instructions
 
 use whatsapp_rust::bot::Bot;
 use whatsapp_rust::store::SqliteStore;
@@ -14,10 +12,8 @@ use whatsapp_rust_ureq_http_client::UreqHttpClient;
 use qrcode::QrCode;
 use qrcode::render::unicode;
 
-mod groups {
-    include!("../src/groups.rs");
-}
-use groups::GroupManagement;
+use whatsapp_invites::groups::GroupManagement;
+use whatsapp_invites::member_utils::{add_members_batch, finalize_member_addition};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,13 +35,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let group_jid: Jid = group_jid_str.parse()?;
     
-    // Validate group JID format
     if !group_jid_str.ends_with("@g.us") {
         eprintln!("Error: Group JID must end with '@g.us'");
         std::process::exit(1);
     }
 
-    // Read and parse phone numbers from JSON file
     let phone_numbers: Vec<String> = match fs::read_to_string(phones_file) {
         Ok(data) => match serde_json::from_str(&data) {
             Ok(phones) => phones,
@@ -66,7 +60,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    // Convert phone numbers to JIDs
     let participant_jids: Vec<Jid> = phone_numbers
         .iter()
         .map(|phone| format!("{}@s.whatsapp.net", phone).parse())
@@ -104,7 +97,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Event::Connected(_) => {
                             println!("Bot connected! Fetching group info...\n");
 
-                            // Query group metadata to display group name
                             if let Ok(metadata) = client.query_group_metadata(&group_jid).await {
                                 println!("=== Group Information ===");
                                 println!("Group Name: {}", metadata.subject);
@@ -113,93 +105,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!();
                             }
 
-                            println!("Adding {} members one by one (5 second delay between each)...\n", participant_jids.len());
+                            let stats = add_members_batch(&client, &group_jid, &participant_jids, 5).await;
 
-                            let mut total_success = 0;
-                            let mut total_failed = 0;
-
-                            for (index, jid) in participant_jids.iter().enumerate() {
-                                println!("=== Adding member {}/{} ===", index + 1, participant_jids.len());
-                                
-                                let mut retry_count = 0;
-                                let max_retries = 2;
-                                let mut added = false;
-                                
-                                while retry_count <= max_retries && !added {
-                                    if retry_count > 0 {
-                                        println!("   Retry attempt {}/{}", retry_count, max_retries);
-                                    }
-                                    
-                                    match client.add_group_participants(&group_jid, &[jid.clone()]).await {
-                                        Ok(results) => {
-                                            for (jid, success, error_code) in results {
-                                                if success {
-                                                    println!("✓ Successfully added: {}", jid);
-                                                    total_success += 1;
-                                                    added = true;
-                                                } else {
-                                                    // Check if it's a rate limit error (429)
-                                                    if let Some(429) = error_code {
-                                                        if retry_count < max_retries {
-                                                            println!("⚠️  Rate limited (429), waiting 30 seconds before retry...");
-                                                            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                                                            retry_count += 1;
-                                                            continue;
-                                                        }
-                                                    }
-                                                    
-                                                    println!("✗ Failed to add: {} (error code: {:?})", jid, error_code);
-                                                    total_failed += 1;
-                                                    added = true;
-                                                    
-                                                    // Explain common error codes
-                                                    if let Some(code) = error_code {
-                                                        match code {
-                                                            403 => println!("   → Not authorized (you may not be an admin)"),
-                                                            409 => println!("   → User is already in the group"),
-                                                            404 => println!("   → User not found or doesn't have WhatsApp"),
-                                                            429 => println!("   → Rate limit exceeded (max retries reached)"),
-                                                            _ => println!("   → Unknown error code"),
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            let error_msg = e.to_string();
-                                            // Check if error message contains rate limit
-                                            if error_msg.contains("429") || error_msg.contains("rate-overlimit") {
-                                                if retry_count < max_retries {
-                                                    println!("⚠️  Rate limited, waiting 30 seconds before retry...");
-                                                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                                                    retry_count += 1;
-                                                    continue;
-                                                }
-                                            }
-                                            
-                                            eprintln!("✗ Failed to add {}: {}", jid, e);
-                                            total_failed += 1;
-                                            added = true;
-                                        }
-                                    }
-                                    
-                                    if !added {
-                                        retry_count += 1;
-                                    }
-                                }
-
-                                // Wait 5 seconds before next member
-                                if index < participant_jids.len() - 1 {
-                                    println!("Waiting 5 seconds before next member...\n");
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                }
-                            }
-
-                            println!("\n=== Final Summary ===");
-                            println!("✓ Successfully added: {}", total_success);
-                            println!("✗ Failed: {}", total_failed);
-                            println!("Total processed: {}", total_success + total_failed);
-
+                            finalize_member_addition(&client, &group_jid, stats).await;
                             std::process::exit(0);
                         }
                         _ => {}
