@@ -45,7 +45,7 @@ pub async fn add_member_with_retry(
         }
 
         match client
-            .add_group_participants(group_jid, &[member_jid.clone()])
+            .add_group_participants(group_jid, std::slice::from_ref(member_jid))
             .await
         {
             Ok(results) => {

@@ -162,7 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             println!("   Retry attempt {}/{}", retry_count, max_retries);
                                         }
 
-                                        match client.add_group_participants(&group_jid, &[jid.clone()]).await {
+                                        match client.add_group_participants(&group_jid, std::slice::from_ref(jid)).await {
                                             Ok(results) => {
                                                 for (jid, success, error_code) in results {
                                                     if success {
