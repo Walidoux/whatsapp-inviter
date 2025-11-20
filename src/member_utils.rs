@@ -55,8 +55,8 @@ pub async fn add_member_with_retry(
                         result.success = true;
                         return result;
                     } else {
-                        if let Some(429) = error_code {
-                            if retry_count < max_retries {
+                        if let Some(429) = error_code
+                            && retry_count < max_retries {
                                 println!(
                                     "⚠️  Rate limited (429), waiting 30 seconds before retry..."
                                 );
@@ -64,7 +64,6 @@ pub async fn add_member_with_retry(
                                 retry_count += 1;
                                 continue;
                             }
-                        }
 
                         if let Some(code) = error_code {
                             result.should_track_invalid = code == 400;
@@ -101,14 +100,13 @@ pub async fn add_member_with_retry(
             Err(e) => {
                 let error_msg = e.to_string();
 
-                if error_msg.contains("429") || error_msg.contains("rate-overlimit") {
-                    if retry_count < max_retries {
+                if (error_msg.contains("429") || error_msg.contains("rate-overlimit"))
+                    && retry_count < max_retries {
                         println!("⚠️  Rate limited, waiting 30 seconds before retry...");
                         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                         retry_count += 1;
                         continue;
                     }
-                }
 
                 result.should_track_invalid =
                     error_msg.contains("400") || error_msg.contains("bad-request");
@@ -149,13 +147,11 @@ pub fn save_invalid_phones(invalid_phones: &[String]) -> Result<usize, String> {
     let file_path = "invalid_phones.json";
     let mut all_invalid_phones: Vec<String> = Vec::new();
 
-    if Path::new(file_path).exists() {
-        if let Ok(existing_data) = fs::read_to_string(file_path) {
-            if let Ok(existing_phones) = serde_json::from_str::<Vec<String>>(&existing_data) {
+    if Path::new(file_path).exists()
+        && let Ok(existing_data) = fs::read_to_string(file_path)
+            && let Ok(existing_phones) = serde_json::from_str::<Vec<String>>(&existing_data) {
                 all_invalid_phones = existing_phones;
             }
-        }
-    }
 
     for phone in invalid_phones {
         if !all_invalid_phones.contains(phone) {
@@ -174,13 +170,11 @@ pub fn save_invalid_phones(invalid_phones: &[String]) -> Result<usize, String> {
 /// Load list of phones that already received invite messages
 fn load_invites_sent() -> Vec<String> {
     let file_path = "invites_sent.json";
-    if Path::new(file_path).exists() {
-        if let Ok(data) = fs::read_to_string(file_path) {
-            if let Ok(phones) = serde_json::from_str::<Vec<String>>(&data) {
+    if Path::new(file_path).exists()
+        && let Ok(data) = fs::read_to_string(file_path)
+            && let Ok(phones) = serde_json::from_str::<Vec<String>>(&data) {
                 return phones;
             }
-        }
-    }
     Vec::new()
 }
 
@@ -200,11 +194,10 @@ fn save_invites_sent(phones: &[String]) -> Result<(), String> {
 fn load_invite_message_template() -> String {
     let file_path = "message.txt";
 
-    if Path::new(file_path).exists() {
-        if let Ok(template) = fs::read_to_string(file_path) {
+    if Path::new(file_path).exists()
+        && let Ok(template) = fs::read_to_string(file_path) {
             return template.trim().to_string();
         }
-    }
 
     // Default template if file doesn't exist
     "Hi! You've been invited to join our WhatsApp group.\n\n\
@@ -265,7 +258,7 @@ pub async fn send_invite_messages(client: &Client, group_jid: &Jid, failed_jids:
         Ok(link) => link,
         Err(e) => {
             eprintln!("⚠️  Failed to get group invite link: {}", e);
-            format!("(ask admin for invite link)")
+            "(ask admin for invite link)".to_string()
         }
     };
 
@@ -300,11 +293,10 @@ pub async fn send_invite_messages(client: &Client, group_jid: &Jid, failed_jids:
     }
 
     // Save updated list of invites sent
-    if sent_count > 0 {
-        if let Err(e) = save_invites_sent(&invites_sent) {
+    if sent_count > 0
+        && let Err(e) = save_invites_sent(&invites_sent) {
             eprintln!("⚠️  Failed to save invites_sent.json: {}", e);
         }
-    }
 
     sent_count
 }

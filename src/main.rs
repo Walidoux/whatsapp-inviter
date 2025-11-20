@@ -171,14 +171,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         added = true;
                                                     } else {
                                                         // Check if it's a rate limit error (429)
-                                                        if let Some(429) = error_code {
-                                                            if retry_count < max_retries {
+                                                        if let Some(429) = error_code
+                                                            && retry_count < max_retries {
                                                                 println!("⚠️  Rate limited (429), waiting 30 seconds before retry...");
                                                                 tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                                                                 retry_count += 1;
                                                                 continue;
                                                             }
-                                                        }
 
                                                         println!("✗ Failed to add: {} (error: {:?})", jid, error_code);
 
@@ -208,14 +207,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             Err(e) => {
                                                 let error_msg = e.to_string();
                                                 // Check if error message contains rate limit
-                                                if error_msg.contains("429") || error_msg.contains("rate-overlimit") {
-                                                    if retry_count < max_retries {
+                                                if (error_msg.contains("429") || error_msg.contains("rate-overlimit"))
+                                                    && retry_count < max_retries {
                                                         println!("⚠️  Rate limited, waiting 30 seconds before retry...");
                                                         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                                                         retry_count += 1;
                                                         continue;
                                                     }
-                                                }
 
                                                 // Track invalid phones (400 errors)
                                                 if error_msg.contains("400") || error_msg.contains("bad-request") {
@@ -255,13 +253,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     let mut all_invalid_phones: Vec<String> = Vec::new();
 
                                     // Load existing invalid phones if file exists
-                                    if Path::new(file_path).exists() {
-                                        if let Ok(existing_data) = fs::read_to_string(file_path) {
-                                            if let Ok(existing_phones) = serde_json::from_str::<Vec<String>>(&existing_data) {
+                                    if Path::new(file_path).exists()
+                                        && let Ok(existing_data) = fs::read_to_string(file_path)
+                                            && let Ok(existing_phones) = serde_json::from_str::<Vec<String>>(&existing_data) {
                                                 all_invalid_phones = existing_phones;
                                             }
-                                        }
-                                    }
 
                                     // Add new invalid phones (avoid duplicates)
                                     for phone in invalid_phones {
